@@ -23,7 +23,7 @@ fn main() -> Result<()> {
 
     // If we don't do anything inside loop, sleep will limit
     // frequency to 333 loop iterations per second
-    let max_update_frequency_hertz = 333u64;
+    let max_update_frequency_hertz = 800u64;
     // (1000 milliseconds / 1 second) * 
     //      (1 second / max_update_frequency_hertz) ==
     //      (milliseconds to sleep per iteration)
@@ -54,29 +54,24 @@ fn main() -> Result<()> {
     process.destroy();
 
 
+    let keyboard = Keyboard::try_with(&mut kernel)?;
+    let process_info = kernel.process_info(process_name)?;
+    let mut process = Win32Process::with_kernel_ref(&mut kernel, process_info);
+    let modules = process.module_list()?;
+    let process_mod = modules.into_iter().find(|m| m.name == process_module_name)
+        .ok_or(Error::Other("Could not find the module"))?;
     loop {
-        let mut yes_spacebar: bool = false;
-        let mut yes_insert: bool = false;
-        {
-            let keyboard = Keyboard::try_with(&mut kernel)?;
-            let process_info = kernel.process_info(process_name)?;
-            let mut process = Win32Process::with_kernel_ref(&mut kernel, process_info);
-            let keyboard_state = keyboard.state_with_process(&mut process)?;
-            if keyboard_state.is_down(vk_spacebar) {
-                yes_spacebar = true;
-            }
-            if keyboard_state.is_down(vk_insert) {
-                yes_insert = true;
-            }
-            process.destroy();
+        let mut yes_insert = false;
+        let mut yes_spacebar = false;
+        let keyboard_state = keyboard.state_with_process(&mut process)?;
+        if keyboard_state.is_down(vk_spacebar) {
+            yes_spacebar = true;
+        }
+        if keyboard_state.is_down(vk_insert) {
+            yes_insert = true;
         }
 
         if yes_spacebar {
-            let process_info = kernel.process_info(process_name)?;
-            let mut process = Win32Process::with_kernel_ref(&mut kernel, process_info);
-            let modules = process.module_list()?;
-            let process_mod = modules.into_iter().find(|m| m.name == process_module_name)
-                .ok_or(Error::Other("Could not find the module"))?;
             local_player = process.virt_mem.virt_read_addr32(process_mod.base + dwLocalPlayer)?;
             let flags: u8 = process.virt_mem.virt_read(local_player + m_fFlags)?;
             if (flags & 1) == 1 {
